@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Wunder Identity Verification</title>
+  <style>
+
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('https://media.istockphoto.com/id/1265448899/photo/biometric-verification-and-face-detection.jpg?s=612x612&w=0&k=20&c=MS4qDvNcZ956b6DFTzGpNfYQ_q5S-Y8POu8mE_bkasY=') center center / cover no-repeat;
+      opacity: 0.15; /* 20% transparency */
+      z-index: -1; /* sits behind everything */
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background: #fafafa;
+      text-align: center;
+      padding: 2em;
+    }
+    .logo {
+      max-height: 60px;
+      margin-bottom: 1em;
+    }
+    input, button {
+      display: block;
+      width: 100%;
+      max-width: 400px;
+      margin: 0.5em auto;
+      padding: 0.8em;
+      font-size: 1.1em;
+    }
+    button {
+      background-color: #000;
+      color: #fff800;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #fff800;
+    }
+    .output {
+      display: none;
+      margin-top: 2em;
+      padding: 1em;
+      background: #fff;
+      border: 1px solid #ccc;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #qrImage {
+      display: block;
+      margin: 0 auto;
+    }
+    .tu-message {
+      margin-top: 2em;
+      font-weight: bold;
+      font-size: 1.2em;
+      color: #000;
+    }
+    .tu-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1em;
+      margin-top: 1em;
+    }
+    .tu-logo {
+      height: 50px;
+    }
+    .tu-qr {
+      height: 45px;
+    }
+    #countdown {
+      font-weight: bold;
+      color: #000;
+      margin-top: 1em;
+    }
+    .result-grid {
+      display: flex;
+      justify-content: center;
+      gap: 2em;
+      flex-wrap: nowrap;
+      max-width: 100%;
+      overflow-x: auto;
+      margin: 2em auto;
+    }
+    .result-box {
+      background: #fff;
+      border: 3px solid #fff800;
+      padding: 1.5em;
+      font-size: 1.4em;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      width: 200px;
+    }
+    .result-emoji {
+      font-size: 3em;
+      margin-top: 0.5em;
+    }
+    #checkResults,
+    #nextUserBtn,
+    #checkResultsNote {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+    
+  <img class="logo" src="https://github.com/JamesCrawshaw16/tu-mobile-assets/blob/main/Wunder-removebg-preview.png?raw=true" alt="TransUnion Logo">
+  <h1>Wunder Identity Verification — <span style="color: #000;">Social Media 2.0</span></h1>
+  <p id="trustBlurb" style="max-width:700px; margin:0.5em auto 1.5em; line-height:1.4;">
+  <strong>Real, authentic connection.</strong><br>
+  By verifying every user, you can be confident you're dealing with real people.
+  No more bots or anonymous fake accounts means less trolling, bullying and a safer,
+  more genuine environment for everyone.
+</p>
+
+
+  <div id="formSection">
+    <div id="formInputs"><!-- NEW: claim-username form, same spot -->
+<input type="text" id="firstName" placeholder="First Name*" required />
+<input type="text" id="lastName"  placeholder="Last Name*" required />
+
+<!-- matches your screenshot format dd/mm/yyyy -->
+<input type="text" id="dob" placeholder="dd/mm/yyyy" inputmode="numeric" />
+
+<input type="email" id="email" placeholder="Email*" required />
+
+<!-- leading @ like the screenshot -->
+<div style="position:relative; max-width:400px; margin:0.5em auto;">
+  <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#777;">@</span>
+  <input type="text" id="username" placeholder="Choose your username*" required
+         style="padding-left:28px; width:100%; box-sizing:border-box;" />
+</div>
+
+<!-- text change only; same id so JS wiring stays -->
+<button id="generate">Claim your username</button>
+
+    </div>
+    <div id="countdown"></div>
+  </div>
+
+  <div class="output" id="output"></div>
+
+  <div id="resultsSection" class="hidden">
+    <div id="checkResultsNote">⏱️ Wait at least 5 seconds after your check before clicking the button below.</div>
+    <button id="checkResults">Check Results</button>
+    <br><br>
+    <div id="formattedResults"></div>
+    <button id="nextUserBtn" onclick="location.reload()">Next User</button>
+    <p class="tu-message">If you need any support, please email help@wunder.com • <em>Social Media 2.0</em></p>
+    <div class="tu-footer">
+      <img class="tu-logo" src="https://companieslogo.com/img/orig/TRU-06bc4c0a.png?t=1720244494" alt="TransUnion Small Logo">
+      <a href="https://www.transunion.co.uk/solution/truvalidate" target="_blank">
+        <img class="tu-qr" src="https://api.qrserver.com/v1/create-qr-code/?data=https://www.transunion.co.uk/solution/truvalidate&size=60x60" alt="Visit TransUnion UK">
+      </a>
+    </div>
+    <br><br>
+  </div>
+
+  <script>
+    let uniqueId = null;
+    let token = null;
+
+    function generateUniqueCode() {
+      const now = new Date();
+      const pad = (n) => n.toString().padStart(2, '0');
+      return `${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${Math.floor(Math.random() * 900 + 100)}`;
+    }
+
+    function calculateAge(dobString) {
+      const dob = new Date(dobString.split("/").reverse().join("-"));
+      const diff = new Date() - dob;
+      return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
+    }
+
+    function getAgeEmoji(age) {
+      if (age < 12) return "👶";
+      if (age < 18) return "🧒";
+      if (age < 50) return "🧑";
+      return "👴";
+    }
+
+    function getDocumentInfo(type) {
+      switch (type) {
+        case "DL": return { label: "Driving Licence", emoji: "🚗" };
+        case "PP": return { label: "Passport", emoji: "🛂" };
+        case "RID":
+        case "NID": return { label: "ID Card", emoji: "🪪" };
+        default: return { label: type || "Document", emoji: "📄" };
+      }
+    }
+
+    function isoToCountryName(iso) {
+      const map = {
+        GBR: "United Kingdom", USA: "United States", CAN: "Canada", AUS: "Australia", DEU: "Germany",
+        FRA: "France", ESP: "Spain", ITA: "Italy", IND: "India", CHN: "China", JPN: "Japan", BRA: "Brazil",
+        ZAF: "South Africa", MEX: "Mexico", NLD: "Netherlands", SWE: "Sweden", CHE: "Switzerland"
+      };
+      return map[iso] || iso;
+    }
+
+   // Handle the first button (Claim your username)
+document.getElementById("generate").addEventListener("click", async () => {
+  // --- read form values
+  const firstName = document.getElementById("firstName")?.value.trim();
+  const lastName  = document.getElementById("lastName")?.value.trim();
+  const fullName  = [firstName, lastName].filter(Boolean).join(" ").trim();
+
+  const email     = document.getElementById("email").value.trim();
+  const dob       = document.getElementById("dob")?.value.trim();       // dd/mm/yyyy (optional)
+  const username  = document.getElementById("username")?.value.trim();  // optional
+
+  const output      = document.getElementById("output");
+  const countdownEl = document.getElementById("countdown");
+
+  // --- simple required validation (matches your UI)
+  if (!firstName || !lastName || !email || !username) {
+    output.style.display = "block";
+    output.innerHTML = "❌ Please complete all required fields.";
+    return;
+  }
+
+  // --- show “generating” and hide form
+  document.getElementById("formInputs").style.display = "none";
+  output.style.display = "block";
+  output.innerHTML = "⏳ Generating QR code.";
+
+  // --- prepare IDs
+  uniqueId = generateUniqueCode();
+  const clientRequestID = "req" + uniqueId;
+
+  try {
+    // --- AUTH (unchanged: same client, secret, username, password)
+    const authRes = await fetch("https://auth.idmission.com/auth/realms/identity/protocol/openid-connect/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "password",
+        client_id: "65874",
+        client_secret: "9RX09PI83iAVJV5hszbOFf7Fz5b1gZ43",
+        username: "ev_integ_65874",
+        password: "JC I#10755$"
+      })
+    });
+    const authData = await authRes.json();
+    token = authData.access_token;
+
+    // --- REQUEST BODY (identical except name/dob filled from new fields)
+    const requestBody = {
+      customerData: {
+        requestType: "IDV-FACE",
+        email,
+        customerCode: "",
+        mobileNumber: "",
+        countryCodeSMS: "string",
+        personalData: {
+          uniqueNumber: uniqueId,
+          name: fullName,      // NEW: assembled from first + last
+          idNumber: "",
+          dob: dob || "",      // optional dd/mm/yyyy
+          expiryDate: ""
+        },
+        policyAcceptanceData: {
+          BiometricTimestamp: "string",
+          BiometricURL: "string",
+          PrivacyPolicyTimestamp: "string",
+          PrivacypolicyURL: "string",
+          TermTimestamp: "string",
+          TermsofserviceURL: "string"
+        }
+      },
+      additionalData: {
+        uniqueRequestId: clientRequestID,
+        clientCustomerNumber: uniqueId,
+        clientRequestID: clientRequestID,
+        notifyLink: "true",
+        linkExpireTime: "3D",
+        amount: "100.00"
+      }
+    };
+
+    // --- QR generation (unchanged)
+    const qrRes = await fetch("https://api.idmission.com/v4/customer/generate-identity-link", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    const qrData = await qrRes.json();
+    const qr = qrData?.customerData?.qrCode;
+    if (!qr) {
+      output.innerHTML = "❌ QR generation failed.";
+      return;
+    }
+
+    output.innerHTML = `<img id="qrImage" src="data:image/jpeg;base64,${qr}" style="max-width:300px;" />`;
+
+    // --- countdown (unchanged)
+    let counter = 20;
+    countdownEl.textContent = `QR will disappear in ${counter} seconds.`;
+    const timer = setInterval(() => {
+      counter--;
+      countdownEl.textContent = `QR will disappear in ${counter} seconds.`;
+      if (counter === 0) {
+        clearInterval(timer);
+        document.getElementById("formSection").style.display = "none";
+        output.style.display = "none";
+        document.getElementById("qrImage").style.display = "none";
+        countdownEl.style.display = "none";
+        document.getElementById("resultsSection").classList.remove("hidden");
+        document.getElementById("checkResults").style.display = "block";
+        document.getElementById("checkResultsNote").style.display = "block";
+      }
+    }, 1000);
+
+  } catch (err) {
+    output.innerHTML = "❌ Something went wrong generating the QR code.";
+  }
+});
+
+
+    document.getElementById("checkResults").addEventListener("click", async () => {
+      document.getElementById("checkResults").style.display = "none";
+      document.getElementById("checkResultsNote").style.display = "none";
+
+      try {
+        const res = await fetch("https://api.idmission.com/v4/customer/get-processed-data", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            additionalData: {
+              clientCustomerNumber: uniqueId,
+              sendInputImages: "N",
+              sendProcessedImages: "N",
+              stripSpecialCharacters: "Y",
+              sendHostDataInPost: "N",
+              sendSignatureFromIdInResponse: "N",
+              sendDocumentIdInResponse: "N",
+              sendMetaDataInResponse: "N"
+            }
+          })
+        });
+
+        const data = await res.json();
+        const extracted = data?.responseCustomerData;
+        if (!extracted) throw new Error("No results yet");
+
+        const docTypeRaw = extracted?.extractedIdData?.idType || "Unknown";
+        const doc = getDocumentInfo(docTypeRaw);
+        const town = extracted?.parsedAddress?.municipality;
+        const countryISO = extracted?.extractedIdData?.idCountry || "🌍";
+        const place = town || isoToCountryName(countryISO);
+        const placeEmoji = town ? "🏙️" : "🌍";
+        const estAge = data?.resultData?.estimatedAge || "?";
+        const dob = extracted?.extractedPersonalData?.dob;
+        const calculatedAge = dob ? calculateAge(dob) : "?";
+        const firstName = extracted?.extractedPersonalData?.firstName || "there";
+
+        document.getElementById("formattedResults").innerHTML = `
+          <h2>Hi there ${firstName} – welcome to <span style="color:#fff800;">Social Media 2.0</span>! Let's look at who you are!</h2>
+          <div class="result-grid">
+            <div class="result-box">
+              You've used a ${doc.label} for this check
+              <div class="result-emoji">${doc.emoji}</div>
+            </div>
+            <div class="result-box">
+              You've travelled here from ${place}
+              <div class="result-emoji">${placeEmoji}</div>
+            </div>
+            <div class="result-box">
+              We reckon you look ${estAge}...
+              <div class="result-emoji">${getAgeEmoji(estAge)}</div>
+            </div>
+            <div class="result-box">
+              ...and you're actually ${calculatedAge}!
+              <div class="result-emoji">${getAgeEmoji(calculatedAge)}</div>
+            </div>
+          </div>
+        `;
+        document.getElementById("nextUserBtn").style.display = "block";
+
+      } catch (err) {
+        document.getElementById("formattedResults").innerHTML = "⚠️ Uh-oh, too quick. Give it a sec and Try again.";
+        document.getElementById("checkResults").style.display = "block";
+      }
+    });
+  </script>
+  <script>
+  function toggleMenu() {
+    const menu = document.getElementById("dropdown-menu");
+    menu.style.display = menu.style.display === "block" ? "none" : "block";
+  }
+
+  document.addEventListener("click", function(event) {
+    const menu = document.getElementById("dropdown-menu");
+    const button = document.getElementById("menu-button");
+    if (!menu.contains(event.target) && !button.contains(event.target)) {
+      menu.style.display = "none";
+    }
+  });
+</script>
+</body>
+</html>
